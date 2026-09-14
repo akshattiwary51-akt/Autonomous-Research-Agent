@@ -1,0 +1,22 @@
+# Local configuration and secrets
+.env
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Runtime state and generated reports
+*.sqlite
+*.sqlite-*
+checkpoints.sqlite
+*.log
+report.md
+
+# Build and coverage artifacts
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/

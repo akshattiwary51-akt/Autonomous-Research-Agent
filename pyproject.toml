@@ -1,0 +1,12 @@
+[project]
+name = "project03-research-agent"
+version = "0.1.0"
+description = "Autonomous ReAct-style academic research agent (Project 03)"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

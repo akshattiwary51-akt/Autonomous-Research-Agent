@@ -1,0 +1,15 @@
+services:
+  research-agent:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - CHECKPOINT_BACKEND=sqlite
+      - CHECKPOINT_DB_PATH=/data/checkpoints.sqlite
+    volumes:
+      - research-agent-data:/data
+    stdin_open: true   # needed for interactive mode / HITL approval prompts
+    tty: true
+
+volumes:
+  research-agent-data:

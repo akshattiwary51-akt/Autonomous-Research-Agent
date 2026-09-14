@@ -1,0 +1,30 @@
+# --- Orchestration ---
+langgraph==0.2.60
+langchain-core==0.3.28
+langchain-openai==0.2.14
+langgraph-checkpoint==2.1.2
+langgraph-checkpoint-sqlite==2.0.11
+
+# --- HTTP / external APIs ---
+requests==2.32.3
+tenacity==9.0.0          # retry/backoff for flaky academic APIs
+pypdf==5.9.0              # full-text PDF extraction (optional accuracy upgrade)
+reportlab==4.2.5          # generates PDFs used by the full-text extraction tests
+
+# --- Config ---
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+
+# --- CLI / output ---
+rich==13.9.4
+
+# --- HTTP API (optional) ---
+fastapi==0.115.6
+uvicorn==0.34.0
+httpx==0.28.1          # required for FastAPI's TestClient in tests
+
+# --- Testing ---
+pytest==8.3.4
+pytest-mock==3.14.0
+responses==0.25.3        # mock HTTP calls in tests
