@@ -48,10 +48,3 @@ def build_checkpointer(settings: Settings | None = None):
         return SqliteSaver(conn)
 
     raise ValueError(f"Unknown checkpoint backend: {settings.checkpoint_backend!r}")
-
-
-def close_checkpointer(checkpointer) -> None:
-    """Close backend resources owned by a checkpointer, when applicable."""
-    connection = getattr(checkpointer, "conn", None)
-    if connection is not None:
-        connection.close()

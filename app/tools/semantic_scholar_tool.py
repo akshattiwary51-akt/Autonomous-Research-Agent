@@ -14,7 +14,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.config import get_settings
 from app.logging_utils import get_logger
-from app.tools.base import Paper, ResearchTool, ToolResult, with_reasoning_fields
+from app.tools.base import Paper, RateLimitError, ResearchTool, ToolResult, with_reasoning_fields
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,14 @@ class SemanticScholarTool(ResearchTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query (keywords or phrase describing the research topic).",
+                    "description": (
+                        "Search query. Use plain keywords or a short natural-"
+                        "language phrase (e.g. 'multimodal RAG scientific "
+                        "documents'). This API does NOT support boolean operators "
+                        "(AND/OR), quotes, or parentheses — a query like "
+                        "'(A OR B) AND (C OR D)' will be matched literally as text "
+                        "and likely return zero results."
+                    ),
                 },
                 "max_results": {
                     "type": "integer",
@@ -96,6 +103,7 @@ class SemanticScholarTool(ResearchTool):
             logger.warning("Semantic Scholar rate limited for query=%r", query)
             return ToolResult(
                 tool_name=self.name, query=query, success=False, error=str(exc),
+                rate_limited=True,
             )
         except requests.exceptions.Timeout:
             logger.warning("Semantic Scholar request timed out for query=%r", query)
@@ -169,7 +177,3 @@ class SemanticScholarTool(ResearchTool):
                 )
             )
         return papers
-
-
-class RateLimitError(Exception):
-    """Raised when an academic API explicitly signals rate limiting."""

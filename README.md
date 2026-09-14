@@ -176,9 +176,25 @@ Three independent safeguards, all implemented in `app/safety/loop_guard.py` and
   between `agent` and `reflection` forever, even if the LLM keeps ignoring guidance.
 - **Independent tool-call ceiling** — `MAX_TOOL_CALLS` is checked separately from
   `MAX_ITERATIONS`, so a generous iteration budget can't bypass a tighter tool-call budget.
+- **Circuit breaker (provider failover)** — `app/safety/circuit_breaker.py`. When a tool
+  returns an explicit rate-limit signal (HTTP 429 — `ToolResult.rate_limited`), it's
+  excluded from the schemas offered to the LLM for `CIRCUIT_BREAKER_COOLDOWN_SECONDS`
+  (default 60s), so failover to a healthy provider happens on the agent's very next turn
+  instead of waiting for reflection to notice the pattern across iterations. Deliberately
+  dynamic rather than a hardcoded fallback chain (e.g. always-ArXiv-then-Crossref) — the
+  agent still picks freely among whatever tools remain healthy, preserving Step 5's
+  "dynamic tool selection" principle. Fails open (never leaves zero tool options) if
+  everything happens to be rate-limited at once. Unlike every other optional component in
+  this project, the circuit breaker defaults to **on** (`build_research_graph` constructs a
+  live instance if none is passed) rather than off, since it adds no LLM cost or latency —
+  only prevents wasted iterations. This was added after observing exactly this failure mode
+  in live use: both ArXiv and Semantic Scholar rate-limited a real run back-to-back before
+  reflection intervened.
 
 A worst-case adversarial test (`tests/test_reflection.py`) proves an LLM that never
 converges and never produces useful evidence still terminates well before `max_iterations`.
+An end-to-end test (`tests/test_circuit_breaker.py`) proves a 429 on one tool causes it to
+be completely excluded from the very next turn's options.
 
 ## 8. Query Refinement
 
@@ -218,14 +234,6 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt --break-system-packages   # or omit the flag in a venv
 ```
 
-On Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
 **Note on `langgraph-checkpoint-sqlite`**: this project pins `langgraph==0.2.60` together
 with `langgraph-checkpoint==2.1.2` and `langgraph-checkpoint-sqlite==2.0.11`. Installing the
 *latest* `langgraph-checkpoint-sqlite` will pull a newer, incompatible `langgraph-checkpoint`
@@ -240,12 +248,6 @@ Copy `.env.example` to `.env` and fill in at least `OPENAI_API_KEY`:
 cp .env.example .env
 ```
 
-On Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
 Key variables (see `.env.example` for the full list with descriptions):
 
 | Variable | Default | Purpose |
@@ -256,6 +258,7 @@ Key variables (see `.env.example` for the full list with descriptions):
 | `MAX_TOOL_CALLS` | `12` | independent tool-call bound |
 | `ZERO_YIELD_REFLECTION_THRESHOLD` | `2` | unproductive searches before reflection |
 | `MAX_REFLECTION_ATTEMPTS` | `2` | reflection attempts before giving up gracefully |
+| `CIRCUIT_BREAKER_COOLDOWN_SECONDS` | `60` | how long a rate-limited tool is excluded from the agent's options |
 | `CHECKPOINT_BACKEND` | `memory` | `memory` or `sqlite` |
 | `ENABLE_HITL` | `false` | pause before every tool call for human approval |
 
@@ -307,20 +310,10 @@ With `ENABLE_HITL=true`, the run instead pauses before every tool call and promp
 Approve this tool call? [y/N]:
 ```
 
-### Optional HTTP API
-
-The project is CLI-first, but it also includes a thin FastAPI job API. See
-[`DEPLOYMENT.md`](DEPLOYMENT.md) for deployment details and the request/poll/approval
-examples. Start it locally with:
-
-```bash
-uvicorn app.api.main:app --host 127.0.0.1 --port 8000
-```
-
 ## 13. Testing
 
 ```bash
-pytest                    # full offline suite; external API calls are mocked
+pytest                    # 148 tests, all offline (every external API mocked via `responses`)
 pytest tests/test_tools.py -v     # run a single file
 ```
 
@@ -347,10 +340,9 @@ results.
 
 ## 15. Limitations
 
-- **Abstract-only by default.** Evidence extraction normally reads paper titles/abstracts as
-  returned by each API. Set `ENABLE_FULLTEXT_FETCH=true` to attempt PDF retrieval when a
-  paper exposes a usable PDF URL; extraction remains bounded by `FULLTEXT_MAX_CHARS` and
-  cannot guarantee access to every paper's full methodology or results sections.
+- **Abstracts only, not full text.** Evidence extraction reads paper titles/abstracts as
+  returned by each API — it cannot verify claims against a paper's full methodology or
+  results sections.
 - **Bounded by design.** A run that hits `MAX_ITERATIONS` may terminate with an
   incomplete picture rather than fully answering the question; this is intentional
   (Step 11) but means thoroughness trades off against the configured bounds.
@@ -371,8 +363,7 @@ results.
 
 - Per-step model configuration (cheap/fast model for decomposition and reflection, a
   stronger model for synthesis).
-- More robust full-text ingestion for papers whose PDFs are unavailable, scanned, or poorly
-  structured.
+- Full-text PDF ingestion for papers where it's available, not just abstracts.
 - A production checkpoint backend (Postgres) — `app/checkpointing.py` is already a single
   swappable factory function, so this is additive, not a rewrite.
 - Mandatory (not just optional) HITL gating for large-scale multi-tool fan-out, per Step 14's

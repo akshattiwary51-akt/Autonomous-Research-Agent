@@ -14,7 +14,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.config import get_settings
 from app.logging_utils import get_logger
-from app.tools.base import Paper, ResearchTool, ToolResult, with_reasoning_fields
+from app.tools.base import Paper, RateLimitError, ResearchTool, ToolResult, with_reasoning_fields
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,11 @@ class CrossrefTool(ResearchTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query (keywords, title fragment, or author).",
+                    "description": (
+                        "Search query. Use plain keywords, a title fragment, or an "
+                        "author name — not boolean syntax (AND/OR/parentheses), "
+                        "which this API does not interpret specially."
+                    ),
                 },
                 "max_results": {
                     "type": "integer",
@@ -83,6 +87,7 @@ class CrossrefTool(ResearchTool):
             logger.warning("Crossref rate limited for query=%r", query)
             return ToolResult(
                 tool_name=self.name, query=query, success=False, error=str(exc),
+                rate_limited=True,
             )
         except requests.exceptions.Timeout:
             logger.warning("Crossref request timed out for query=%r", query)
@@ -163,7 +168,3 @@ class CrossrefTool(ResearchTool):
             )
 
         return papers
-
-
-class RateLimitError(Exception):
-    """Raised when Crossref explicitly signals rate limiting."""

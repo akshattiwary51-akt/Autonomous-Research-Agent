@@ -8,7 +8,7 @@ import tempfile
 import pytest
 import responses
 
-from app.checkpointing import build_checkpointer, close_checkpointer
+from app.checkpointing import build_checkpointer
 from app.config import Settings
 from app.graph.build_graph import build_research_graph
 from app.llm.base import AgentDecision, ReasoningClient
@@ -56,7 +56,6 @@ class TestBuildCheckpointer:
             settings = Settings(checkpoint_backend="sqlite", checkpoint_db_path=db_path)
             checkpointer = build_checkpointer(settings)
             assert isinstance(checkpointer, SqliteSaver)
-            close_checkpointer(checkpointer)
 
     def test_unknown_backend_raises_clear_error(self):
         settings = Settings.model_construct(checkpoint_backend="postgres", checkpoint_db_path="x")
@@ -109,8 +108,6 @@ class TestCheckpointingPersistsAndResumes:
 
             assert recovered.values.get("research_question") == "persisted question"
             assert recovered.values.get("status") == "done"
-            close_checkpointer(checkpointer_a)
-            close_checkpointer(checkpointer_b)
 
 
 # --------------------------------------------------------------------------

@@ -8,7 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
-
+COPY .env.example .
 
 # Persistent checkpoint DB lives here when CHECKPOINT_BACKEND=sqlite;
 # mount a volume at this path to survive container restarts.

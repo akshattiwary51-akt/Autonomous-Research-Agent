@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # — controls cost/latency; full papers are truncated to this length.
     fulltext_max_chars: int = Field(default=15000, ge=1000, le=200000)
 
+    # --- Circuit breaker (Step 11 extension) ---
+    # How long (seconds) a rate-limited tool is excluded from the agent's
+    # options before being offered again.
+    circuit_breaker_cooldown_seconds: float = Field(default=60.0, ge=1.0, le=3600.0)
+
     # --- HITL ---
     enable_hitl: bool = Field(default=False)
 

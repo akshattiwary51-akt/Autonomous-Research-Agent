@@ -28,6 +28,14 @@ narrower or broader scope, or targeting a different sub-question entirely.
 
 Ground your diagnosis only in the search history provided below. Do not \
 fabricate reasons not evidenced by the actual queries/results shown.
+
+IMPORTANT: any suggested_query you propose must be plain keywords or a \
+short natural-language phrase. Most of these academic search APIs do \
+simple keyword/phrase matching, NOT boolean search — a query like \
+"(A OR B) AND (C OR D)" will usually be matched as literal text and \
+return zero results. If broader coverage is needed, prefer proposing \
+several separate simpler queries (or switching sub-question/tool) over \
+one complex boolean expression.
 """
 
 

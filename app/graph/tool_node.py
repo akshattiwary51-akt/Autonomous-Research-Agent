@@ -1,4 +1,4 @@
-"""Tool node — the Act + Observe step, as a LangGraph node.
+"""Tool node -- the Act + Observe step, as a LangGraph node.
 
 Consumes `state["pending_action"]` (set by agent_node) and executes it via
 the shared `execute_tool_call` logic from app.agent, so tool execution
@@ -12,11 +12,15 @@ from typing import Any, Callable
 
 from app.agent import execute_tool_call
 from app.llm.base import AgentDecision
+from app.safety.circuit_breaker import CircuitBreaker
 from app.state import ResearchState
 from app.tools.base import ToolRegistry
 
 
-def build_tool_node(registry: ToolRegistry) -> Callable[[ResearchState], dict[str, Any]]:
+def build_tool_node(
+    registry: ToolRegistry,
+    circuit_breaker: CircuitBreaker | None = None,
+) -> Callable[[ResearchState], dict[str, Any]]:
     def tool_node(state: ResearchState) -> dict[str, Any]:
         pending = state.get("pending_action") or {}
         decision = AgentDecision(
@@ -26,6 +30,6 @@ def build_tool_node(registry: ToolRegistry) -> Callable[[ResearchState], dict[st
             sub_question=pending.get("sub_question"),
             rationale_summary=pending.get("rationale_summary"),
         )
-        return execute_tool_call(state, registry, decision)
+        return execute_tool_call(state, registry, decision, circuit_breaker)
 
     return tool_node

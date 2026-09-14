@@ -70,10 +70,22 @@ class ToolResult:
     success: bool
     papers: list[Paper] = field(default_factory=list)
     error: Optional[str] = None
+    # True specifically when the failure was an explicit rate-limit signal
+    # (HTTP 429) from the provider -- distinguished from other failures
+    # (timeout, malformed response, 5xx) because it's the one signal that
+    # means "this exact provider is throttling us right now", which is
+    # what the circuit breaker (app/safety/circuit_breaker.py) acts on.
+    rate_limited: bool = False
 
     @property
     def result_count(self) -> int:
         return len(self.papers)
+
+
+class RateLimitError(Exception):
+    """Raised when an academic API explicitly signals rate limiting (429).
+    Shared across tools so the circuit breaker's trip condition is
+    consistent regardless of which provider raised it."""
 
 
 # --------------------------------------------------------------------------
@@ -220,3 +232,14 @@ class ToolRegistry:
     def schemas(self) -> list[dict[str, Any]]:
         """OpenAI/LangChain-compatible tool schemas for every registered tool."""
         return [tool.openai_tool_schema() for tool in self._tools.values()]
+
+    def schemas_for(self, names: list[str]) -> list[dict[str, Any]]:
+        """Schemas for only the given tool names, in registry order —
+        used by the circuit breaker to offer the LLM only currently-healthy
+        tools without needing to rebuild the registry itself."""
+        name_set = set(names)
+        return [
+            tool.openai_tool_schema()
+            for tool in self._tools.values()
+            if tool.name in name_set
+        ]

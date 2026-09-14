@@ -9,7 +9,6 @@ langgraph-checkpoint-sqlite==2.0.11
 requests==2.32.3
 tenacity==9.0.0          # retry/backoff for flaky academic APIs
 pypdf==5.9.0              # full-text PDF extraction (optional accuracy upgrade)
-reportlab==4.2.5          # generates PDFs used by the full-text extraction tests
 
 # --- Config ---
 pydantic==2.10.4

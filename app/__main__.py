@@ -17,6 +17,7 @@ from app.evidence.evaluator import ContradictionDetector, EvidenceEvaluator
 from app.evidence.openai_evaluator import OpenAIContradictionDetector, OpenAIEvidenceEvaluator
 from app.fulltext.fetcher import FullTextFetcher, NoOpFullTextFetcher
 from app.fulltext.pdf_fetcher import HttpPdfFullTextFetcher
+from app.safety.circuit_breaker import CircuitBreaker
 from app.graph.build_graph import build_research_graph
 from app.llm.base import ReasoningClient
 from app.llm.decomposition import QueryDecomposer
@@ -176,6 +177,7 @@ def run_research_state(
     one job per request) should pass an explicit unique id instead.
     """
     checkpointer = build_checkpointer(settings)
+    circuit_breaker = CircuitBreaker(cooldown_seconds=settings.circuit_breaker_cooldown_seconds)
     graph = build_research_graph(
         registry, reasoning_client,
         decomposer=decomposer,
@@ -185,6 +187,7 @@ def run_research_state(
         gap_discoverer=gap_discoverer,
         narrative_writer=narrative_writer,
         fulltext_fetcher=fulltext_fetcher,
+        circuit_breaker=circuit_breaker,
         checkpointer=checkpointer,
         enable_hitl=settings.enable_hitl,
     )

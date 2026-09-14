@@ -38,6 +38,7 @@ from app.llm.decomposition import NoOpDecomposer, QueryDecomposer
 from app.llm.reflection import NoOpReflectionAdvisor, ReflectionAdvisor
 from app.report.gap_discovery import GapDiscoverer, NoOpGapDiscoverer
 from app.report.narrative import NarrativeWriter, NoOpNarrativeWriter
+from app.safety.circuit_breaker import CircuitBreaker
 from app.state import ResearchState
 from app.tools.base import ToolRegistry
 
@@ -52,6 +53,7 @@ def build_research_graph(
     gap_discoverer: GapDiscoverer | None = None,
     narrative_writer: NarrativeWriter | None = None,
     fulltext_fetcher: FullTextFetcher | None = None,
+    circuit_breaker: CircuitBreaker | None = None,
     checkpointer=None,
     enable_hitl: bool = False,
 ):
@@ -68,6 +70,13 @@ def build_research_graph(
     `fulltext_fetcher` defaults to `NoOpFullTextFetcher` (evidence stays
     grounded in abstracts only) — so existing callers/tests that don't
     pass these keep working unchanged.
+
+    `circuit_breaker` is the one exception to "defaults to off": it
+    defaults to a live `CircuitBreaker` instance rather than a NoOp, since
+    it only ever prevents wasted iterations on a tool that just signaled
+    it's rate-limited (HTTP 429) — no added LLM cost or latency, so
+    there's no reason to make it opt-in. Pass an explicit instance only if
+    you want a non-default cooldown period.
 
     `checkpointer` is left as an explicit optional parameter so callers can
     pass in a `MemorySaver` / `SqliteSaver` from `app.checkpointing` (Step
@@ -88,12 +97,17 @@ def build_research_graph(
     gap_discoverer = gap_discoverer or NoOpGapDiscoverer()
     narrative_writer = narrative_writer or NoOpNarrativeWriter()
     fulltext_fetcher = fulltext_fetcher or NoOpFullTextFetcher()
+    # Unlike the other components (which default to NoOp — off — since
+    # they cost extra LLM calls/latency), the circuit breaker defaults to
+    # ON: it only ever prevents wasted iterations on a tool that just
+    # signaled it's rate-limited, with zero added cost or latency.
+    circuit_breaker = circuit_breaker or CircuitBreaker()
 
     graph = StateGraph(ResearchState)
 
     graph.add_node("planner", build_planner_node(decomposer))
-    graph.add_node("agent", build_agent_node(registry, reasoning_client))
-    graph.add_node("tool", build_tool_node(registry))
+    graph.add_node("agent", build_agent_node(registry, reasoning_client, circuit_breaker))
+    graph.add_node("tool", build_tool_node(registry, circuit_breaker))
     graph.add_node("evidence_eval", build_evidence_node(evidence_evaluator, contradiction_detector, fulltext_fetcher))
     graph.add_node("reflection", build_reflection_node(reflection_advisor, registry.names()))
     graph.add_node("synthesis", build_synthesis_node(gap_discoverer, narrative_writer))

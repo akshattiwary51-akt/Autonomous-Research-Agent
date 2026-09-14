@@ -16,6 +16,7 @@ from typing import Any
 from app.config import get_settings
 from app.llm.base import AgentDecision, ReasoningClient
 from app.logging_utils import IterationLog, get_logger, log_iteration
+from app.safety.circuit_breaker import CircuitBreaker
 from app.safety.loop_guard import should_force_synthesis
 from app.state import ResearchState, SearchRecord, ToolCallRecord, paper_to_state_dict
 from app.tools.base import ToolRegistry, hash_tool_call
@@ -39,21 +40,35 @@ def decide_action(
     state: ResearchState,
     registry: ToolRegistry,
     reasoning_client: ReasoningClient,
+    circuit_breaker: CircuitBreaker | None = None,
 ) -> AgentDecision:
     """Reason step: ask the LLM what to do next, but enforce hard bounds
     (Step 11.A max iterations, plus the max-tool-calls bound) before even
-    consulting the LLM."""
+    consulting the LLM.
+
+    When a `circuit_breaker` is provided, any tool currently rate-limited
+    (open) is excluded from the schemas offered to the LLM this turn, so
+    provider failover happens immediately rather than waiting for
+    reflection to notice the pattern across iterations.
+    """
     force_stop, reason = should_force_synthesis(state, get_settings())
     if force_stop:
         return AgentDecision(action="synthesize", rationale_summary=reason)
 
-    return reasoning_client.decide_next_action(state, registry.schemas())
+    if circuit_breaker is not None:
+        available = circuit_breaker.available_tools(registry.names())
+        schemas = registry.schemas_for(available)
+    else:
+        schemas = registry.schemas()
+
+    return reasoning_client.decide_next_action(state, schemas)
 
 
 def execute_tool_call(
     state: ResearchState,
     registry: ToolRegistry,
     decision: AgentDecision,
+    circuit_breaker: CircuitBreaker | None = None,
 ) -> dict[str, Any]:
     """Act + Observe step: execute the chosen tool (or handle a bad/duplicate
     choice gracefully) and return a partial state update.
@@ -112,6 +127,9 @@ def execute_tool_call(
     # --- Execute ---
     tool = registry.get(tool_name)
     result = tool.run(**tool_args)
+
+    if circuit_breaker is not None:
+        circuit_breaker.record_result(tool_name, result.success, result.rate_limited)
 
     call_record = ToolCallRecord(
         iteration=iteration, tool_name=tool_name, args=tool_args, call_hash=call_hash,

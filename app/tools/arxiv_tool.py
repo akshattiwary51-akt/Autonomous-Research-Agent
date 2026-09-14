@@ -16,7 +16,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.config import get_settings
 from app.logging_utils import get_logger
-from app.tools.base import Paper, ResearchTool, ToolResult, with_reasoning_fields
+from app.tools.base import Paper, RateLimitError, ResearchTool, ToolResult, with_reasoning_fields
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,12 @@ class ArxivTool(ResearchTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query (keywords or phrase describing the research topic).",
+                    "description": (
+                        "Search query. Plain keywords or a short phrase work best "
+                        "(e.g. 'multimodal RAG scientific documents'). ArXiv's API "
+                        "does support basic boolean operators (AND/OR/ANDNOT) if "
+                        "needed, but simple keyword phrases are more reliable."
+                    ),
                 },
                 "max_results": {
                     "type": "integer",
@@ -65,6 +70,8 @@ class ArxivTool(ResearchTool):
             "sortOrder": "descending",
         }
         response = requests.get(ARXIV_API_URL, params=params, timeout=timeout)
+        if response.status_code == 429:
+            raise RateLimitError("ArXiv rate limit exceeded (429).")
         response.raise_for_status()
         return response
 
@@ -81,6 +88,12 @@ class ArxivTool(ResearchTool):
 
         try:
             response = self._fetch(query=query, max_results=max_results, timeout=timeout)
+        except RateLimitError as exc:
+            logger.warning("ArXiv rate limited for query=%r", query)
+            return ToolResult(
+                tool_name=self.name, query=query, success=False,
+                error=str(exc), rate_limited=True,
+            )
         except requests.exceptions.Timeout:
             logger.warning("ArXiv request timed out for query=%r", query)
             return ToolResult(
